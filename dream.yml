@@ -1,0 +1,5 @@
+type: deployment
+dependencies:
+  cognito_app: ""
+  redis: ""
+  session_secret: ""
