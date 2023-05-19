@@ -1,5 +1,5 @@
 terraform {
-  #  backend "s3" {}
+    backend "s3" {}
 
   required_providers {
     docker = {
@@ -34,12 +34,25 @@ locals {
     for k in var.dream_secrets : k => data.aws_ssm_parameter.secret_env[k].value
   }
 
+  oidc_env = {
+    OIDC_CLIENT_ID           = module.cognito_app.OIDC_CLIENT_ID
+    OIDC_CLIENT_SECRET       = data.aws_ssm_parameter.oidc_client_secret.value
+    OIDC_ISSUER_URL          = module.cognito_app.OIDC_ISSUER_URL
+    OIDC_DISCOVERY_URL       = module.cognito_app.OIDC_DISCOVERY_URL
+    OIDC_LOGOUT_URL          = module.cognito_app.OIDC_LOGOUT_URL
+    OIDC_LOGOUT_REDIRECT_URL = module.cognito_app.OIDC_LOGOUT_REDIRECT_URL
+    OIDC_CALLBACK_URL        = module.cognito_app.OIDC_CALLBACK_URL
+  }
+
   env = toset([
-    for k, v in merge(local.non_secret_cleaned, local.secret_env, {
+    for k, v in merge(local.oidc_env, local.non_secret_cleaned, local.secret_env, {
       REDIS_HOST = "host.docker.internal"
     }) : "${k}=${v}"
   ])
-  port = split(":", var.root_url)[2]
+}
+
+data "aws_ssm_parameter" "oidc_client_secret" {
+  name = module.cognito_app.OIDC_CLIENT_SECRET.key
 }
 
 data "aws_ssm_parameter" "secret_env" {
@@ -65,7 +78,7 @@ resource "docker_container" "oidc_sidecar" {
   image = docker_image.oidc_sidecar.image_id
   ports {
     internal = 8080
-    external = local.port
+    external = var.port
   }
   env      = local.env
   must_run = true
@@ -74,3 +87,11 @@ resource "docker_container" "oidc_sidecar" {
     name = docker_network.private_network.name
   }
 }
+
+module "cognito_app" {
+  source                   = "github.com/hereya/terraform-modules//cognito-app/module?ref=v0.16.0"
+  app_base_url             = "http://localhost:${var.port}"
+  cognito_user_pool_domain = var.cognito_user_pool_domain
+  cognito_user_pool_id     = var.cognito_user_pool_id
+}
+
