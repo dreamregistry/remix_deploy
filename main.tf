@@ -1,5 +1,5 @@
 terraform {
-    backend "s3" {}
+  backend "s3" {}
 
   required_providers {
     docker = {
@@ -12,7 +12,11 @@ terraform {
     }
     aws = {
       source  = "registry.terraform.io/hashicorp/aws"
-      version = "~> 4.0"
+      version = "~>4.0"
+    }
+    local = {
+      source  = "hashicorp/local"
+      version = "~>2.4"
     }
   }
 }
@@ -20,6 +24,7 @@ terraform {
 provider "random" {}
 provider "docker" {}
 provider "aws" {}
+provider "local" {}
 
 locals {
   non_secret_env = {
@@ -49,6 +54,17 @@ locals {
       REDIS_HOST = "host.docker.internal"
     }) : "${k}=${v}"
   ])
+
+  url_parse_regex          = "(?:(?P<scheme>[^:/?#]+):)?(?://(?P<authority>[^/?#]*))?(?P<path>[^?#]*)(?:\\?(?P<query>[^#]*))?(?:#(?P<fragment>.*))?"
+  root_url_parts           = regex(local.url_parse_regex, var.root_url)
+  root_url_scheme          = local.root_url_parts.scheme
+  root_url_authority       = local.root_url_parts.authority
+  root_url_authority_parts = split(":", local.root_url_authority)
+  root_url_host            = local.root_url_authority_parts[0]
+  app_host                 = contains([
+    "localhost", "127.0.0.1"
+  ], local.root_url_host) ? "host.docker.internal" : local.root_url_host
+  app_port = length(local.root_url_authority_parts) == 2 ? local.root_url_authority_parts[1] : (local.root_url_scheme == "https" ? "443" : "80")
 }
 
 data "aws_ssm_parameter" "oidc_client_secret" {
@@ -60,25 +76,58 @@ data "aws_ssm_parameter" "secret_env" {
   name     = var.dream_env[each.key].key
 }
 
-resource "random_pet" "container_name" {}
 resource "random_pet" "docker_network_name" {}
 
+resource "docker_network" "private_network" {
+  name = "oidc-sidecar-${random_pet.docker_network_name.id}"
+}
+
+resource "docker_image" "envoy" {
+  name = "envoyproxy/envoy:v1.26-latest"
+}
+
+resource "random_pet" "envoy_container_name" {}
+
+resource "local_file" "envoy_config" {
+  filename = "${path.module}/envoy.yaml"
+  content  = templatefile("${path.module}/envoy.tpl.yaml", {
+    port     = var.port
+    appPort  = local.app_port
+    appHost  = local.app_host
+    authHost = docker_container.oidc_sidecar.hostname
+    authPort = 8080
+  })
+}
+
+resource "docker_container" "envoy" {
+  image = docker_image.envoy.image_id
+  name  = "envoy-${random_pet.envoy_container_name.id}"
+  ports {
+    internal = var.port
+    external = var.port
+  }
+  volumes {
+    container_path = "/etc/envoy/envoy.yaml"
+    host_path      = abspath(local_file.envoy_config.filename)
+    read_only      = true
+  }
+  networks_advanced {
+    name = docker_network.private_network.name
+  }
+}
 
 resource "docker_image" "oidc_sidecar" {
   name         = "public.ecr.aws/c5q9w4j6/oidc-sidecar:latest"
   keep_locally = true
 }
 
-resource "docker_network" "private_network" {
-  name = "oidc-sidecar-${random_pet.docker_network_name.id}"
-}
+resource "random_pet" "oidc_sidecar_container_name" {}
 
 resource "docker_container" "oidc_sidecar" {
-  name  = "oidc-sidecar-${random_pet.container_name.id}"
+  name  = "oidc-sidecar-${random_pet.oidc_sidecar_container_name.id}"
   image = docker_image.oidc_sidecar.image_id
   ports {
     internal = 8080
-    external = var.port
   }
   env      = local.env
   must_run = true

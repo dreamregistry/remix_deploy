@@ -5,3 +5,4 @@ terraform.tfstate*
 /.idea
 /.dream
 /terraform.tfvars
+/envoy.yaml
