@@ -1,6 +1,6 @@
 # REMIX DEPLOY
 
-A DReAM package that deploys an envoy reverse proxy for Remix app.
+The development version of a DReAM package that deploys Remix app to ECS secured with Cognito.
 
 ## Usage
 
