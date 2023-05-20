@@ -95,7 +95,7 @@ resource "local_file" "envoy_config" {
     appPort  = local.app_port
     appHost  = local.app_host
     authHost = docker_container.oidc_sidecar.hostname
-    authPort = 8080
+    authPort = docker_container.oidc_sidecar.ports[0].internal
   })
 }
 
@@ -111,6 +111,8 @@ resource "docker_container" "envoy" {
     host_path      = abspath(local_file.envoy_config.filename)
     read_only      = true
   }
+  must_run = true
+  rm       = true
   networks_advanced {
     name = docker_network.private_network.name
   }

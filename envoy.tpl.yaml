@@ -66,16 +66,6 @@ static_resources:
                 # Individual filters applied by the HTTP Connection Manager.
                 # https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/network/http_connection_manager/v3/http_connection_manager.proto#envoy-v3-api-msg-extensions-filters-network-http-connection-manager-v3-httpfilter
                 http_filters:
-#                  - name: envoy.filters.http.ext_proc
-#                    typed_config:
-#                      "@type": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor
-#                      message_timeout:
-#                        seconds: 2
-#                      grpc_service:
-#                        timeout:
-#                          seconds: 600
-#                        envoy_grpc:
-#                          cluster_name: processor
                   # The router filter performs HTTP forwarding with optional logic for retries, statistics, etc.
                   # https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/router/v3/router.proto#extension-envoy-filters-http-router
                   # https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/router_filter#config-http-filters-router
@@ -115,18 +105,5 @@ static_resources:
                     socket_address:
                       address: ${authHost}
                       port_value: ${authPort}
-#    - name: processor
-#      connect_timeout: 0.25s
-#      type: STATIC
-#      lb_policy: ROUND_ROBIN
-#      http2_protocol_options: {}
-#      load_assignment:
-#        cluster_name: processor
-#        endpoints:
-#          - lb_endpoints:
-#              - endpoint:
-#                  address:
-#                    socket_address:
-#                      address: 127.0.0.1
-#                      port_value: 9000
+
 
